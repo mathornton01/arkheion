@@ -14,8 +14,8 @@ import (
 // MeilisearchService wraps the Meilisearch client for book indexing and search.
 type MeilisearchService struct {
 	cfg    *config.Config
-	client meilisearch.ServiceManager
-	index  meilisearch.IndexManager
+	client meilisearch.ClientInterface
+	index  meilisearch.IndexInterface
 }
 
 // SearchResult is the response from a Meilisearch search query.
@@ -33,7 +33,10 @@ type SearchResult struct {
 // NewMeilisearchService creates a new MeilisearchService and ensures the books
 // index exists with the correct settings.
 func NewMeilisearchService(cfg *config.Config) (*MeilisearchService, error) {
-	client := meilisearch.New(cfg.MeilisearchURL, meilisearch.WithAPIKey(cfg.MeilisearchMasterKey))
+	client := meilisearch.NewClient(meilisearch.ClientConfig{
+		Host:   cfg.MeilisearchURL,
+		APIKey: cfg.MeilisearchMasterKey,
+	})
 
 	// Verify connectivity
 	if _, err := client.Health(); err != nil {
