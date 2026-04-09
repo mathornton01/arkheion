@@ -32,21 +32,6 @@
     if (!browser || !BarcodeScanner) return;
     cameraError = '';
 
-    // Request permission
-    let granted = false;
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      stream.getTracks().forEach(t => t.stop());
-      granted = true;
-    } catch {
-      granted = false;
-    }
-
-    if (!granted) {
-      cameraError = 'Camera permission denied. Allow camera access in your browser settings.';
-      return;
-    }
-
     scanner = new BarcodeScanner(videoEl);
     scanning = true;
     scannerActive.set(true);
@@ -57,7 +42,13 @@
     };
 
     scanner.onError = (err) => {
-      if (err.name !== 'NotFoundException') {
+      // Suppress "not found" noise — only show real errors
+      const msg = err.message || '';
+      const isNotFound =
+        err.name === 'NotFoundException' ||
+        msg.includes('No MultiFormat') ||
+        msg.includes('not found');
+      if (!isNotFound) {
         cameraError = `Scanner error: ${err.message}`;
       }
     };
@@ -67,7 +58,11 @@
     } catch (err) {
       scanning = false;
       scannerActive.set(false);
-      cameraError = `Failed to start camera: ${err.message}`;
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        cameraError = 'Camera permission denied. Allow camera access in your browser settings then reload.';
+      } else {
+        cameraError = `Failed to start camera: ${err.message}`;
+      }
     }
   }
 
