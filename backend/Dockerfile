@@ -43,11 +43,10 @@ EXPOSE 8080
 CMD ["air", "-c", ".air.toml"]
 
 # ---- Stage 3: Production runtime --------------------------------------------
-FROM scratch AS final
+# Use alpine (not scratch) so healthcheck tools (wget) are available
+FROM alpine:3.19 AS final
 
-# Import certs and timezone data from build stage
-COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-COPY --from=build /usr/share/zoneinfo /usr/share/zoneinfo
+RUN apk add --no-cache ca-certificates tzdata wget
 
 # Copy the compiled binary
 COPY --from=build /arkheion /arkheion
