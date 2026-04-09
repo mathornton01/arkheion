@@ -1,7 +1,7 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import { goto } from '$app/navigation';
-  import { BarcodeScanner, isCameraSupported, requestCameraPermission } from '$lib/scanner.js';
+  import { browser } from '$app/environment';
   import { scanBarcode, createBook } from '$lib/api.js';
   import { lastScannedISBN, scannerActive, notify } from '$lib/stores.js';
 
@@ -14,14 +14,34 @@
   let lookupError = '';
   let addingBook = false;
   let scanTags = 'scanned';
+  let supported = false;
 
-  const supported = isCameraSupported();
+  // Dynamically import scanner only in browser (ZXing uses browser APIs, breaks SSR)
+  let BarcodeScanner = null;
+
+  onMount(async () => {
+    if (!browser) return;
+    const mod = await import('$lib/scanner.js');
+    BarcodeScanner = mod.BarcodeScanner;
+    supported = mod.isCameraSupported();
+  });
 
   onDestroy(() => { scanner?.stop(); });
 
   async function startScanner() {
+    if (!browser || !BarcodeScanner) return;
     cameraError = '';
-    const granted = await requestCameraPermission();
+
+    // Request permission
+    let granted = false;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      stream.getTracks().forEach(t => t.stop());
+      granted = true;
+    } catch {
+      granted = false;
+    }
+
     if (!granted) {
       cameraError = 'Camera permission denied. Allow camera access in your browser settings.';
       return;
@@ -60,6 +80,7 @@
   async function performLookup(barcode) {
     scanner?.stop();
     scanning = false;
+    scannerActive.set(false);
     lookupLoading = true;
     lookupError = '';
     lookupResult = null;
@@ -124,12 +145,12 @@
 <div class="scan-page">
   <div class="page-header">
     <h1>Scan Barcode</h1>
-    <p class="text-muted text-sm">Point your camera at a book's ISBN barcode to add it to your library.</p>
+    <p class="text-muted text-sm">Point your webcam at a book's ISBN barcode to add it to your library.</p>
   </div>
 
-  {#if !supported}
+  {#if !supported && browser}
     <div class="alert alert-error">
-      Camera access is not supported in this browser. Try Chrome or Safari on a mobile device.
+      Camera access is not supported in this browser. Try Chrome, Edge, or Firefox with camera permissions enabled.
     </div>
   {:else}
 
@@ -141,16 +162,18 @@
           {#if scanning}
             <div class="scan-overlay">
               <div class="scan-frame"></div>
+              <div class="scan-line"></div>
             </div>
           {:else}
             <div class="video-placeholder">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" width="36" height="36">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" width="40" height="40">
                 <path d="M3 9V6a2 2 0 0 1 2-2h3"/><path d="M21 9V6a2 2 0 0 0-2-2h-3"/>
                 <path d="M3 15v3a2 2 0 0 0 2 2h3"/><path d="M21 15v3a2 2 0 0 1-2 2h-3"/>
                 <line x1="7" y1="8" x2="7" y2="16"/><line x1="11" y1="8" x2="11" y2="16"/>
                 <line x1="15" y1="8" x2="15" y2="16"/><line x1="17" y1="8" x2="17" y2="16"/>
               </svg>
               <span>Camera inactive</span>
+              <span class="text-xs" style="color: var(--color-text-dim)">Click Start Camera to begin</span>
             </div>
           {/if}
         </div>
@@ -161,9 +184,19 @@
 
         <div class="scanner-controls">
           {#if !scanning}
-            <button class="btn btn-primary" on:click={startScanner}>Start Camera</button>
+            <button class="btn btn-primary" on:click={startScanner}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">
+                <circle cx="12" cy="12" r="3"/><path d="M3 7c0-1.1.9-2 2-2h2l2-3h6l2 3h2a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/>
+              </svg>
+              Start Camera
+            </button>
           {:else}
-            <button class="btn btn-secondary" on:click={stopScanner}>Stop Camera</button>
+            <button class="btn btn-secondary" on:click={stopScanner}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">
+                <rect x="3" y="3" width="18" height="18" rx="2"/>
+              </svg>
+              Stop Camera
+            </button>
           {/if}
         </div>
 
@@ -255,10 +288,11 @@
   <div class="tips card mt-4">
     <p class="tips-heading">Tips</p>
     <ul class="tips-list">
-      <li>Good lighting improves scan accuracy</li>
-      <li>ISBNs are on the back cover, starting with 978 or 979</li>
-      <li>Hold the camera 15–25 cm from the barcode</li>
-      <li>Use the manual entry below if scanning fails</li>
+      <li>Good lighting significantly improves scan accuracy</li>
+      <li>ISBNs are on the back cover, usually starting with 978 or 979</li>
+      <li>Hold the barcode 15–25 cm from the camera</li>
+      <li>Keep the barcode centered in the red frame</li>
+      <li>Use manual entry below if the camera scan fails</li>
     </ul>
   </div>
 </div>
@@ -274,17 +308,18 @@
   .video-container {
     position: relative;
     width: 100%;
-    background: var(--color-bg-card);
+    background: #0a0a0a;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-lg);
     overflow: hidden;
     aspect-ratio: 4/3;
-    max-height: 340px;
+    max-height: 360px;
     margin-bottom: 0.875rem;
     transition: border-color var(--transition);
   }
   .video-container.active {
     border-color: var(--color-primary);
+    box-shadow: 0 0 0 1px var(--color-primary);
   }
 
   .video-feed {
@@ -300,7 +335,7 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 0.625rem;
+    gap: 0.5rem;
     color: var(--color-text-dim);
     font-size: 0.8rem;
   }
@@ -313,20 +348,44 @@
     justify-content: center;
     pointer-events: none;
   }
+
   .scan-frame {
-    width: 220px;
-    height: 90px;
-    border: 1.5px solid var(--color-primary);
+    position: relative;
+    width: 240px;
+    height: 100px;
+    border: 2px solid var(--color-primary);
     border-radius: 4px;
-    box-shadow: 0 0 0 4000px rgba(0,0,0,0.4);
-    animation: pulse 1.6s ease-in-out infinite;
-  }
-  @keyframes pulse {
-    0%, 100% { border-color: var(--color-primary); opacity: 0.9; }
-    50%       { border-color: var(--color-accent);  opacity: 1; }
+    box-shadow: 0 0 0 4000px rgba(0,0,0,0.45);
+    overflow: hidden;
   }
 
-  .scanner-controls { display: flex; justify-content: center; }
+  .scan-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--color-primary), transparent);
+    animation: scan 2s ease-in-out infinite;
+    top: 0;
+  }
+
+  @keyframes scan {
+    0%   { top: 0; opacity: 1; }
+    50%  { top: calc(100px - 2px); opacity: 1; }
+    100% { top: 0; opacity: 1; }
+  }
+
+  .scanner-controls {
+    display: flex;
+    justify-content: center;
+    gap: 0.625rem;
+  }
+
+  .scanner-controls .btn {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
 
   .scanning-status {
     display: flex;

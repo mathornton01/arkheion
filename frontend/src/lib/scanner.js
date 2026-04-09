@@ -2,11 +2,10 @@
  * Arkheion — ZXing Barcode Scanner wrapper
  *
  * Wraps @zxing/library to provide a simple start/stop API for scanning
- * ISBN barcodes from the device camera. Designed for use in the /scan route.
+ * ISBN barcodes from the device camera. Import this only in browser context.
  *
- * Usage:
- *   import { BarcodeScanner } from '$lib/scanner.js';
- *
+ * Usage (inside onMount or browser-only code):
+ *   const { BarcodeScanner } = await import('$lib/scanner.js');
  *   const scanner = new BarcodeScanner(videoElement);
  *   scanner.onResult = (isbn) => console.log('Scanned:', isbn);
  *   scanner.onError = (err) => console.error(err);
@@ -27,7 +26,7 @@ export class BarcodeScanner {
     this.reader = null;
     this.scanning = false;
     this.lastResult = null;
-    this.debounceMs = 1500; // Prevent duplicate scans within 1.5s
+    this.debounceMs = 1500;
     this.lastScanTime = 0;
 
     /** @type {(isbn: string) => void} */
@@ -38,13 +37,11 @@ export class BarcodeScanner {
 
   /**
    * Start the camera and begin scanning for barcodes.
-   * Prompts for camera permission if not already granted.
-   * @param {string} [deviceId] - Optional camera device ID. Uses environment-facing camera by default.
+   * @param {string} [deviceId] - Optional camera device ID.
    */
   async start(deviceId = null) {
     if (this.scanning) return;
 
-    // Configure ZXing to look for 1D barcode formats (ISBN barcodes are EAN-13)
     const hints = new Map();
     hints.set(DecodeHintType.POSSIBLE_FORMATS, [
       BarcodeFormat.EAN_13,
@@ -60,8 +57,7 @@ export class BarcodeScanner {
     this.scanning = true;
 
     try {
-      // If no specific deviceId, pick the environment-facing (rear) camera
-      const selectedDeviceId = deviceId ?? await this._getRearCameraId();
+      const selectedDeviceId = deviceId ?? await this._getPreferredCameraId();
 
       await this.reader.decodeFromVideoDevice(
         selectedDeviceId,
@@ -80,7 +76,6 @@ export class BarcodeScanner {
             }
           }
           if (error && error.name !== 'NotFoundException') {
-            // NotFoundException is normal (no barcode in frame) — ignore it
             if (this.onError) {
               this.onError(error);
             }
@@ -113,25 +108,27 @@ export class BarcodeScanner {
    * @returns {Promise<MediaDeviceInfo[]>}
    */
   static async listCameras() {
-    const devices = await BrowserMultiFormatReader.listVideoInputDevices();
-    return devices;
+    return BrowserMultiFormatReader.listVideoInputDevices();
   }
 
   /**
-   * Returns the device ID of the environment-facing (rear) camera,
-   * or null to let ZXing choose the default.
+   * Returns the device ID of the preferred camera.
+   * On mobile, prefers rear camera. On desktop, uses default (null = first available).
    * @private
    */
-  async _getRearCameraId() {
+  async _getPreferredCameraId() {
     try {
       const devices = await BarcodeScanner.listCameras();
-      // Prefer "environment" or "back" in the label
+      if (!devices.length) return null;
+
+      // On mobile, prefer rear/environment camera
       const rear = devices.find(
         (d) =>
           d.label.toLowerCase().includes('back') ||
           d.label.toLowerCase().includes('environment') ||
           d.label.toLowerCase().includes('rear')
       );
+      // On desktop or if no rear camera found, use null (ZXing picks the default/first)
       return rear?.deviceId ?? null;
     } catch {
       return null;
@@ -140,24 +137,10 @@ export class BarcodeScanner {
 }
 
 /**
- * Check if the browser supports camera access.
+ * Check if the browser supports camera access via getUserMedia.
  * @returns {boolean}
  */
 export function isCameraSupported() {
-  return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
-}
-
-/**
- * Request camera permission proactively (shows browser permission dialog).
- * @returns {Promise<boolean>} true if permission granted
- */
-export async function requestCameraPermission() {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-    // Release the stream immediately — we just want to trigger the permission dialog
-    stream.getTracks().forEach((t) => t.stop());
-    return true;
-  } catch {
-    return false;
-  }
+  return typeof navigator !== 'undefined' &&
+    !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
 }
