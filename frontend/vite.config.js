@@ -22,16 +22,7 @@ export default defineConfig({
 	},
 
 	build: {
-		sourcemap: false,
-		rollupOptions: {
-			output: {
-				// Split large vendor chunks (pdfjs excluded — handled as external)
-				manualChunks: {
-					epubjs: ['epubjs'],
-					zxing: ['@zxing/library']
-				}
-			}
-		}
+		sourcemap: false
 	},
 
 	// Required for pdfjs-dist worker
