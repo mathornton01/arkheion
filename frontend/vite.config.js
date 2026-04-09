@@ -25,9 +25,8 @@ export default defineConfig({
 		sourcemap: false,
 		rollupOptions: {
 			output: {
-				// Split large vendor chunks
+				// Split large vendor chunks (pdfjs excluded — handled as external)
 				manualChunks: {
-					pdfjs: ['pdfjs-dist'],
 					epubjs: ['epubjs'],
 					zxing: ['@zxing/library']
 				}
