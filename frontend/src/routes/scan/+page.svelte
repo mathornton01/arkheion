@@ -13,21 +13,17 @@
   let lookupLoading = false;
   let lookupError = '';
   let addingBook = false;
-
-  // Tags to add to scanned books (user preference)
   let scanTags = 'scanned';
 
   const supported = isCameraSupported();
 
-  onDestroy(() => {
-    scanner?.stop();
-  });
+  onDestroy(() => { scanner?.stop(); });
 
   async function startScanner() {
     cameraError = '';
     const granted = await requestCameraPermission();
     if (!granted) {
-      cameraError = 'Camera permission denied. Please allow camera access in your browser settings.';
+      cameraError = 'Camera permission denied. Allow camera access in your browser settings.';
       return;
     }
 
@@ -36,9 +32,7 @@
     scannerActive.set(true);
 
     scanner.onResult = async (barcode) => {
-      // Immediately show the scanned value
       lastScannedISBN.set(barcode);
-      // Pause scanning while we look up
       await performLookup(barcode);
     };
 
@@ -64,7 +58,6 @@
   }
 
   async function performLookup(barcode) {
-    // Pause scanner while looking up
     scanner?.stop();
     scanning = false;
     lookupLoading = true;
@@ -75,8 +68,7 @@
       lookupResult = await scanBarcode(barcode);
     } catch (err) {
       if (err.code === 'ISBN_NOT_FOUND') {
-        lookupError = `No book found for barcode: ${barcode}. You can add it manually.`;
-        // Pre-fill ISBN at least
+        lookupError = `No match found for barcode: ${barcode}.`;
         lookupResult = { isbn: barcode, title: '', authors: [], source: 'manual' };
       } else {
         lookupError = `Lookup failed: ${err.message}`;
@@ -111,7 +103,7 @@
         cover_url: lookupResult.cover_url,
         tags: scanTags.split(',').map(t => t.trim()).filter(Boolean)
       });
-      notify.success(`"${book.title}" added to library!`);
+      notify.success(`"${book.title}" added to library`);
       goto(`/library/${book.id}`);
     } catch (err) {
       notify.error('Failed to add book: ' + err.message);
@@ -132,17 +124,16 @@
 <div class="scan-page">
   <div class="page-header">
     <h1>Scan Barcode</h1>
-    <p class="text-muted">Point your camera at a book's ISBN barcode to add it to your library.</p>
+    <p class="text-muted text-sm">Point your camera at a book's ISBN barcode to add it to your library.</p>
   </div>
 
   {#if !supported}
     <div class="alert alert-error">
-      Your browser does not support camera access. Try using a modern mobile browser (Chrome or Safari).
+      Camera access is not supported in this browser. Try Chrome or Safari on a mobile device.
     </div>
   {:else}
 
     {#if !lookupResult}
-      <!-- Camera view -->
       <div class="scanner-section">
         <div class="video-container" class:active={scanning}>
           <!-- svelte-ignore a11y-media-has-caption -->
@@ -153,8 +144,13 @@
             </div>
           {:else}
             <div class="video-placeholder">
-              <span class="placeholder-icon">📷</span>
-              <span>Camera feed will appear here</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" width="36" height="36">
+                <path d="M3 9V6a2 2 0 0 1 2-2h3"/><path d="M21 9V6a2 2 0 0 0-2-2h-3"/>
+                <path d="M3 15v3a2 2 0 0 0 2 2h3"/><path d="M21 15v3a2 2 0 0 1-2 2h-3"/>
+                <line x1="7" y1="8" x2="7" y2="16"/><line x1="11" y1="8" x2="11" y2="16"/>
+                <line x1="15" y1="8" x2="15" y2="16"/><line x1="17" y1="8" x2="17" y2="16"/>
+              </svg>
+              <span>Camera inactive</span>
             </div>
           {/if}
         </div>
@@ -165,33 +161,28 @@
 
         <div class="scanner-controls">
           {#if !scanning}
-            <button class="btn btn-primary" on:click={startScanner}>
-              📷 Start Camera
-            </button>
+            <button class="btn btn-primary" on:click={startScanner}>Start Camera</button>
           {:else}
-            <button class="btn btn-secondary" on:click={stopScanner}>
-              ⏹ Stop Camera
-            </button>
+            <button class="btn btn-secondary" on:click={stopScanner}>Stop Camera</button>
           {/if}
         </div>
 
         {#if $lastScannedISBN && lookupLoading}
           <div class="scanning-status">
             <div class="spinner"></div>
-            <p>Looking up: <strong>{$lastScannedISBN}</strong></p>
+            <span>Looking up <strong>{$lastScannedISBN}</strong></span>
           </div>
         {/if}
       </div>
 
-      <!-- Manual ISBN entry -->
       <div class="manual-section">
         <hr class="divider" />
-        <h3>Or enter ISBN manually</h3>
+        <h3 class="manual-heading">Enter ISBN manually</h3>
         <form class="manual-form" on:submit={handleManualISBN}>
           <input class="input" name="isbn" type="text"
             placeholder="ISBN-10 or ISBN-13 (e.g. 9780345539434)"
             pattern="[\d\-X]+" />
-          <button type="submit" class="btn btn-primary">🔍 Lookup</button>
+          <button type="submit" class="btn btn-primary">Lookup</button>
         </form>
       </div>
     {:else}
@@ -206,26 +197,31 @@
             {#if lookupResult.cover_url}
               <img src={lookupResult.cover_url} alt={lookupResult.title} class="result-cover" />
             {:else}
-              <div class="result-cover-placeholder">📖</div>
+              <div class="result-cover-placeholder">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" width="36" height="36">
+                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                </svg>
+              </div>
             {/if}
 
             <div class="result-info">
-              <div class="result-source text-xs text-dim mb-2">
-                Found via {lookupResult.source === 'openlibrary' ? 'OpenLibrary' : lookupResult.source === 'google_books' ? 'Google Books' : 'Manual entry'}
+              <div class="result-source">
+                {lookupResult.source === 'openlibrary' ? 'OpenLibrary' : lookupResult.source === 'google_books' ? 'Google Books' : 'Manual entry'}
               </div>
 
               {#if lookupResult.title}
                 <h2 class="result-title">{lookupResult.title}</h2>
               {:else}
-                <p class="text-muted">No title found — please edit after adding</p>
+                <p class="text-muted text-sm">No title found — edit after adding</p>
               {/if}
 
               {#if lookupResult.authors?.length > 0}
-                <p class="result-authors">by {lookupResult.authors.join(', ')}</p>
+                <p class="result-authors">{lookupResult.authors.join(', ')}</p>
               {/if}
               {#if lookupResult.publisher}
-                <p class="text-muted text-sm">{lookupResult.publisher}
-                  {#if lookupResult.published_date} · {new Date(lookupResult.published_date).getFullYear()}{/if}
+                <p class="text-muted text-sm">
+                  {lookupResult.publisher}
+                  {#if lookupResult.published_date} &middot; {new Date(lookupResult.published_date).getFullYear()}{/if}
                 </p>
               {/if}
               {#if lookupResult.isbn}
@@ -235,27 +231,20 @@
           </div>
 
           {#if lookupResult.description}
-            <p class="result-description text-muted text-sm">{lookupResult.description.slice(0, 300)}
-              {#if lookupResult.description.length > 300}…{/if}
-            </p>
+            <p class="result-description text-muted text-sm">{lookupResult.description.slice(0, 300)}{#if lookupResult.description.length > 300}…{/if}</p>
           {/if}
 
-          <!-- Tags for this scan -->
           <div class="field mt-4">
-            <label class="label" for="scan-tags">Tags to add (comma-separated)</label>
+            <label class="label" for="scan-tags">Tags (comma-separated)</label>
             <input id="scan-tags" class="input" type="text" bind:value={scanTags}
               placeholder="scanned, to-read" />
           </div>
 
           <div class="result-actions">
-            <button class="btn btn-secondary" on:click={scanAnother}>
-              📷 Scan Another
-            </button>
-            <a href="/library" class="btn btn-secondary">
-              Add Manually
-            </a>
+            <button class="btn btn-secondary" on:click={scanAnother}>Scan Another</button>
+            <a href="/library" class="btn btn-secondary">Add Manually</a>
             <button class="btn btn-primary" on:click={addBook} disabled={addingBook}>
-              {addingBook ? 'Adding…' : '+ Add to Library'}
+              {addingBook ? 'Adding…' : 'Add to Library'}
             </button>
           </div>
         </div>
@@ -263,36 +252,35 @@
     {/if}
   {/if}
 
-  <!-- Tips -->
   <div class="tips card mt-4">
-    <h3 class="mb-2">Tips for scanning</h3>
+    <p class="tips-heading">Tips</p>
     <ul class="tips-list">
-      <li>Hold the book's barcode in good lighting</li>
-      <li>Most ISBNs are on the back cover, starting with 978 or 979</li>
-      <li>Keep the camera 15–25 cm from the barcode</li>
-      <li>If scanning fails, use the manual ISBN entry below</li>
+      <li>Good lighting improves scan accuracy</li>
+      <li>ISBNs are on the back cover, starting with 978 or 979</li>
+      <li>Hold the camera 15–25 cm from the barcode</li>
+      <li>Use the manual entry below if scanning fails</li>
     </ul>
   </div>
 </div>
 
 <style>
-  .scan-page { max-width: 680px; }
+  .scan-page { max-width: 640px; }
 
-  .page-header { margin-bottom: 2rem; }
+  .page-header { margin-bottom: 1.75rem; }
   .page-header h1 { margin-bottom: 0.25rem; }
 
-  .scanner-section { margin-bottom: 1.5rem; }
+  .scanner-section { margin-bottom: 1.25rem; }
 
   .video-container {
     position: relative;
     width: 100%;
     background: var(--color-bg-card);
-    border: 2px solid var(--color-border);
+    border: 1px solid var(--color-border);
     border-radius: var(--radius-lg);
     overflow: hidden;
     aspect-ratio: 4/3;
-    max-height: 360px;
-    margin-bottom: 1rem;
+    max-height: 340px;
+    margin-bottom: 0.875rem;
     transition: border-color var(--transition);
   }
   .video-container.active {
@@ -312,13 +300,11 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 0.5rem;
+    gap: 0.625rem;
     color: var(--color-text-dim);
-    font-size: 0.875rem;
+    font-size: 0.8rem;
   }
-  .placeholder-icon { font-size: 2.5rem; }
 
-  /* Scan overlay — animated frame */
   .scan-overlay {
     position: absolute;
     inset: 0;
@@ -328,93 +314,110 @@
     pointer-events: none;
   }
   .scan-frame {
-    width: 240px;
-    height: 100px;
-    border: 2px solid var(--color-accent);
+    width: 220px;
+    height: 90px;
+    border: 1.5px solid var(--color-primary);
     border-radius: 4px;
-    box-shadow: 0 0 0 4000px rgba(0,0,0,0.35);
-    animation: pulse 1.5s ease-in-out infinite;
+    box-shadow: 0 0 0 4000px rgba(0,0,0,0.4);
+    animation: pulse 1.6s ease-in-out infinite;
   }
   @keyframes pulse {
-    0%, 100% { border-color: var(--color-accent); }
-    50%       { border-color: var(--color-primary); }
+    0%, 100% { border-color: var(--color-primary); opacity: 0.9; }
+    50%       { border-color: var(--color-accent);  opacity: 1; }
   }
 
-  .scanner-controls { display: flex; gap: 0.75rem; justify-content: center; }
+  .scanner-controls { display: flex; justify-content: center; }
 
   .scanning-status {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0.625rem;
     justify-content: center;
-    margin-top: 1rem;
+    margin-top: 0.875rem;
     color: var(--color-text-muted);
-    font-size: 0.875rem;
+    font-size: 0.825rem;
   }
 
-  .manual-section { margin-top: 1.5rem; }
-  .manual-section h3 { margin-bottom: 0.75rem; }
-  .manual-form {
-    display: flex;
-    gap: 0.75rem;
+  .manual-section { margin-top: 1.25rem; }
+  .manual-heading {
+    font-size: 0.825rem;
+    font-weight: 500;
+    color: var(--color-text-muted);
+    margin-bottom: 0.625rem;
   }
+  .manual-form { display: flex; gap: 0.625rem; }
   .manual-form .input { flex: 1; }
 
   /* Result */
-  .result-section {}
-  .result-card { padding: 1.5rem; }
-  .result-layout {
-    display: flex;
-    gap: 1.5rem;
-    margin-bottom: 1rem;
-  }
+  .result-card { padding: 1.375rem; }
+  .result-layout { display: flex; gap: 1.25rem; margin-bottom: 0.875rem; }
   .result-cover {
-    width: 100px;
-    height: 140px;
+    width: 88px;
+    height: 124px;
     object-fit: cover;
     border-radius: var(--radius);
     flex-shrink: 0;
   }
   .result-cover-placeholder {
-    width: 100px;
-    height: 140px;
+    width: 88px;
+    height: 124px;
     background: var(--color-bg-elevated);
     border-radius: var(--radius);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 2rem;
+    color: var(--color-text-dim);
     flex-shrink: 0;
   }
   .result-info { flex: 1; }
-  .result-title { font-size: 1.25rem; margin-bottom: 0.25rem; }
-  .result-authors { color: var(--color-accent); font-size: 0.9rem; margin-bottom: 0.25rem; }
-  .result-description { margin-top: 0.75rem; line-height: 1.6; }
+  .result-source {
+    font-size: 0.675rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--color-text-dim);
+    margin-bottom: 0.4rem;
+  }
+  .result-title { font-size: 1.1rem; margin-bottom: 0.2rem; }
+  .result-authors { color: var(--color-accent); font-size: 0.85rem; margin-bottom: 0.2rem; font-weight: 500; }
+  .result-description { margin-top: 0.625rem; line-height: 1.6; }
   .result-actions {
     display: flex;
-    gap: 0.75rem;
-    margin-top: 1.25rem;
+    gap: 0.625rem;
+    margin-top: 1rem;
     flex-wrap: wrap;
   }
 
   /* Tips */
-  .tips h3 { color: var(--color-text-muted); font-size: 0.875rem; }
+  .tips { padding: 1rem 1.25rem; }
+  .tips-heading {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--color-text-dim);
+    margin-bottom: 0.5rem;
+  }
   .tips-list {
     list-style: none;
     display: flex;
     flex-direction: column;
-    gap: 0.375rem;
+    gap: 0.3rem;
   }
   .tips-list li {
-    font-size: 0.8rem;
-    color: var(--color-text-dim);
-    padding-left: 1.25rem;
+    font-size: 0.775rem;
+    color: var(--color-text-muted);
+    padding-left: 1rem;
     position: relative;
   }
   .tips-list li::before {
-    content: '•';
+    content: '';
     position: absolute;
-    left: 0.375rem;
-    color: var(--color-primary);
+    left: 0.25rem;
+    top: 0.55em;
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: var(--color-primary);
   }
 </style>

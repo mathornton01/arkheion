@@ -9,7 +9,6 @@
   let addLoading = false;
   let isbnLoading = false;
 
-  // Add Book form state
   let form = {
     isbn: '', title: '', subtitle: '', authors: '', publisher: '',
     published_date: '', description: '', page_count: '',
@@ -120,9 +119,7 @@
     formError = '';
   }
 
-  function openBook(id) {
-    goto(`/library/${id}`);
-  }
+  function openBook(id) { goto(`/library/${id}`); }
 </script>
 
 <svelte:head><title>Library — Arkheion</title></svelte:head>
@@ -136,10 +133,21 @@
     </div>
     <div class="header-actions">
       <div class="view-toggle">
-        <button class:active={$libraryViewMode === 'grid'} on:click={() => libraryViewMode.set('grid')}>⊞</button>
-        <button class:active={$libraryViewMode === 'list'} on:click={() => libraryViewMode.set('list')}>☰</button>
+        <button class:active={$libraryViewMode === 'grid'} on:click={() => libraryViewMode.set('grid')} title="Grid view">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
+            <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+            <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+          </svg>
+        </button>
+        <button class:active={$libraryViewMode === 'list'} on:click={() => libraryViewMode.set('list')} title="List view">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14">
+            <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/>
+            <line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/>
+            <line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+          </svg>
+        </button>
       </div>
-      <button class="btn btn-primary" on:click={() => { showAddModal = true; resetForm(); }}>+ Add Book</button>
+      <button class="btn btn-primary" on:click={() => { showAddModal = true; resetForm(); }}>Add Book</button>
     </div>
   </div>
 
@@ -173,13 +181,10 @@
   {#if loading}
     <div class="loading-state">
       <div class="spinner"></div>
-      <p class="text-muted">Loading books…</p>
     </div>
   {:else if $books.length === 0}
     <div class="empty-state">
-      <div class="empty-icon">📭</div>
-      <h2>No books found</h2>
-      <p class="text-muted">Try adjusting your filters or add some books.</p>
+      <p class="text-muted">No books found. Try adjusting your filters.</p>
     </div>
   {:else if $libraryViewMode === 'grid'}
     <div class="grid-books">
@@ -188,7 +193,11 @@
           {#if book.cover_url}
             <img src={book.cover_url} alt={book.title} class="cover" loading="lazy" />
           {:else}
-            <div class="cover-placeholder">📖</div>
+            <div class="cover-placeholder">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" width="28" height="28">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+              </svg>
+            </div>
           {/if}
           <div class="info">
             <div class="title">{book.title}</div>
@@ -196,7 +205,7 @@
               <div class="author">{book.authors[0].name}</div>
             {/if}
             {#if book.file_type}
-              <span class="badge badge-muted" style="margin-top:0.25rem;font-size:0.65rem">
+              <span class="badge badge-muted" style="margin-top:0.3rem;font-size:0.6rem">
                 {book.file_type.toUpperCase()}
               </span>
             {/if}
@@ -212,24 +221,26 @@
           {#if book.cover_url}
             <img src={book.cover_url} alt="" class="list-cover" />
           {:else}
-            <div class="list-cover-placeholder">📖</div>
+            <div class="list-cover-placeholder">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.25" width="18" height="18">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+              </svg>
+            </div>
           {/if}
           <div class="list-info">
             <div class="list-title">{book.title}</div>
             {#if book.authors?.length > 0}
-              <div class="list-author text-muted text-sm">
-                {book.authors.map(a => a.name).join(', ')}
-              </div>
+              <div class="list-author text-muted text-sm">{book.authors.map(a => a.name).join(', ')}</div>
             {/if}
             <div class="list-meta text-xs text-dim">
               {#if book.publisher}{book.publisher} · {/if}
               {#if book.language}{book.language.toUpperCase()} · {/if}
               {#if book.text_extracted}
-                <span style="color: var(--color-success)">✓ Searchable</span>
+                <span style="color:var(--color-success)">Searchable</span>
               {:else if book.file_type}
-                <span style="color: var(--color-warning)">⏳ Extracting…</span>
+                <span style="color:var(--color-warning)">Extracting</span>
               {:else}
-                <span class="text-dim">No file</span>
+                <span>No file</span>
               {/if}
             </div>
           </div>
@@ -247,12 +258,12 @@
   {#if $bookPagination.total_pages > 1}
     <div class="pagination">
       <button class="btn btn-secondary" disabled={$bookPagination.page <= 1}
-        on:click={() => goToPage($bookPagination.page - 1)}>← Previous</button>
+        on:click={() => goToPage($bookPagination.page - 1)}>Previous</button>
       <span class="text-muted text-sm">
-        Page {$bookPagination.page} of {$bookPagination.total_pages}
+        {$bookPagination.page} / {$bookPagination.total_pages}
       </span>
       <button class="btn btn-secondary" disabled={$bookPagination.page >= $bookPagination.total_pages}
-        on:click={() => goToPage($bookPagination.page + 1)}>Next →</button>
+        on:click={() => goToPage($bookPagination.page + 1)}>Next</button>
     </div>
   {/if}
 </div>
@@ -263,7 +274,7 @@
     <div class="modal">
       <div class="modal-header">
         <h2>Add Book</h2>
-        <button class="modal-close" on:click={() => showAddModal = false}>✕</button>
+        <button class="modal-close" on:click={() => showAddModal = false}>&#x2715;</button>
       </div>
 
       <div class="modal-body">
@@ -274,14 +285,14 @@
         <!-- ISBN lookup -->
         <div class="isbn-row">
           <div class="field" style="flex:1; margin-bottom:0">
-            <label class="label" for="isbn">ISBN (optional — auto-fills metadata)</label>
+            <label class="label" for="isbn">ISBN — auto-fills metadata</label>
             <input id="isbn" class="input" type="text" placeholder="9780345539434"
               bind:value={form.isbn} />
           </div>
           <button class="btn btn-secondary" on:click={lookupIsbn} disabled={isbnLoading}>
-            {isbnLoading ? 'Looking up…' : '🔍 Lookup'}
+            {isbnLoading ? 'Looking up…' : 'Lookup'}
           </button>
-          <a href="/scan" class="btn btn-secondary" title="Scan barcode with camera">📷</a>
+          <a href="/scan" class="btn btn-secondary" title="Scan barcode">Scan</a>
         </div>
 
         <hr class="divider" />
@@ -359,9 +370,9 @@
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    margin-bottom: 1.5rem;
+    margin-bottom: 1.25rem;
   }
-  .header-actions { display: flex; gap: 0.75rem; align-items: center; }
+  .header-actions { display: flex; gap: 0.625rem; align-items: center; }
 
   .view-toggle {
     display: flex;
@@ -374,9 +385,10 @@
     background: none;
     border: none;
     color: var(--color-text-muted);
-    padding: 0.4rem 0.7rem;
+    padding: 0.45rem 0.625rem;
     cursor: pointer;
-    font-size: 1rem;
+    display: flex;
+    align-items: center;
     transition: all var(--transition);
   }
   .view-toggle button.active {
@@ -384,32 +396,32 @@
     color: white;
   }
 
-  .filters.card { padding: 1rem 1.25rem; }
+  .filters.card { padding: 0.875rem 1rem; }
   .filters-row {
     display: flex;
-    gap: 1rem;
+    gap: 0.875rem;
     align-items: flex-end;
     flex-wrap: wrap;
   }
   .filters-row .field { margin-bottom: 0; }
 
-  .loading-state, .empty-state {
-    text-align: center;
-    padding: 4rem 2rem;
+  .loading-state {
     display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 1rem;
+    justify-content: center;
+    padding: 4rem;
   }
-  .empty-icon { font-size: 3rem; }
+  .empty-state {
+    text-align: center;
+    padding: 3rem 2rem;
+  }
 
   /* List view */
-  .book-list { display: flex; flex-direction: column; gap: 0.5rem; }
+  .book-list { display: flex; flex-direction: column; gap: 0.375rem; }
   .book-list-item {
     display: flex;
     align-items: center;
-    gap: 1rem;
-    padding: 0.875rem 1rem;
+    gap: 0.875rem;
+    padding: 0.75rem 0.875rem;
     background: var(--color-bg-card);
     border: 1px solid var(--color-border);
     border-radius: var(--radius);
@@ -419,31 +431,30 @@
     transition: all var(--transition);
   }
   .book-list-item:hover {
-    border-color: var(--color-primary-dim);
-    box-shadow: var(--shadow-sm);
+    border-color: var(--color-border-strong);
   }
   .list-cover {
-    width: 40px;
-    height: 56px;
+    width: 36px;
+    height: 52px;
     object-fit: cover;
-    border-radius: 4px;
+    border-radius: 3px;
     flex-shrink: 0;
   }
   .list-cover-placeholder {
-    width: 40px;
-    height: 56px;
+    width: 36px;
+    height: 52px;
     display: flex;
     align-items: center;
     justify-content: center;
     background: var(--color-bg-elevated);
-    border-radius: 4px;
-    font-size: 1.25rem;
+    border-radius: 3px;
+    color: var(--color-text-dim);
     flex-shrink: 0;
   }
   .list-info { flex: 1; min-width: 0; }
-  .list-title { font-weight: 600; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .list-author { margin-top: 0.125rem; }
-  .list-meta { margin-top: 0.25rem; }
+  .list-title { font-weight: 600; font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .list-author { margin-top: 0.1rem; }
+  .list-meta { margin-top: 0.2rem; }
   .list-tags { display: flex; gap: 0.25rem; flex-wrap: wrap; flex-shrink: 0; }
 
   /* Pagination */
@@ -451,7 +462,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 1.5rem;
+    gap: 1.25rem;
     margin-top: 2rem;
   }
 
@@ -459,7 +470,7 @@
   .modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0,0,0,0.75);
+    background: rgba(0,0,0,0.8);
     z-index: 200;
     display: flex;
     align-items: center;
@@ -468,10 +479,10 @@
   }
   .modal {
     background: var(--color-bg-elevated);
-    border: 1px solid var(--color-border);
+    border: 1px solid var(--color-border-strong);
     border-radius: var(--radius-lg);
     width: 100%;
-    max-width: 680px;
+    max-width: 660px;
     max-height: 90vh;
     display: flex;
     flex-direction: column;
@@ -481,35 +492,37 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 1.25rem 1.5rem;
+    padding: 1.125rem 1.375rem;
     border-bottom: 1px solid var(--color-border);
   }
   .modal-close {
     background: none;
     border: none;
     color: var(--color-text-muted);
-    font-size: 1.1rem;
+    font-size: 0.875rem;
     cursor: pointer;
     padding: 0.25rem;
+    line-height: 1;
   }
+  .modal-close:hover { color: var(--color-text); }
   .modal-body {
     flex: 1;
     overflow-y: auto;
-    padding: 1.5rem;
+    padding: 1.375rem;
   }
   .modal-footer {
     display: flex;
     justify-content: flex-end;
-    gap: 0.75rem;
-    padding: 1rem 1.5rem;
+    gap: 0.625rem;
+    padding: 0.875rem 1.375rem;
     border-top: 1px solid var(--color-border);
   }
 
   .isbn-row {
     display: flex;
-    gap: 0.75rem;
+    gap: 0.625rem;
     align-items: flex-end;
-    margin-bottom: 1rem;
+    margin-bottom: 0.875rem;
   }
 
   .form-grid {
@@ -518,5 +531,5 @@
     gap: 0 1rem;
   }
 
-  textarea.input { resize: vertical; min-height: 80px; }
+  textarea.input { resize: vertical; min-height: 72px; }
 </style>

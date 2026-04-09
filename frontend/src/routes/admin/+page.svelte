@@ -6,7 +6,6 @@
   } from '$lib/api.js';
   import { notify } from '$lib/stores.js';
 
-  // Webhooks
   let webhooks = [];
   let webhooksLoading = true;
   let showWebhookForm = false;
@@ -16,15 +15,12 @@
 
   const allEvents = ['book.created', 'book.updated', 'book.deleted', 'book.text_extracted'];
 
-  // Export
   let exportTag = '';
   let exportCategory = '';
   let exportLanguage = '';
   let exportLoading = false;
 
-  onMount(async () => {
-    await loadWebhooks();
-  });
+  onMount(async () => { await loadWebhooks(); });
 
   async function loadWebhooks() {
     webhooksLoading = true;
@@ -109,7 +105,6 @@
       const jsonl = await exportBooks(params);
       const lines = jsonl.trim().split('\n').filter(Boolean).length;
 
-      // Create a download
       const blob = new Blob([jsonl], { type: 'application/x-ndjson' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -132,28 +127,24 @@
 <div class="admin-page">
   <h1>Admin</h1>
 
-  <!-- =====================================================================
-       Webhooks Section
-       ===================================================================== -->
+  <!-- Webhooks -->
   <section class="section">
     <div class="section-header">
       <div>
         <h2>Webhooks</h2>
-        <p class="text-muted text-sm">
-          Connect external tools like Grimoire to receive real-time events.
-        </p>
+        <p class="text-muted text-sm">Push real-time events to Grimoire and other integrations.</p>
       </div>
       <button class="btn btn-primary" on:click={() => { showWebhookForm = true; webhookFormError = ''; }}>
-        + Add Webhook
+        Add Webhook
       </button>
     </div>
 
     {#if webhooksLoading}
-      <div class="spinner" style="margin:2rem auto"></div>
+      <div style="padding:2rem; display:flex; justify-content:center"><div class="spinner"></div></div>
     {:else if webhooks.length === 0 && !showWebhookForm}
       <div class="empty-card">
-        <p class="text-muted">No webhooks configured.</p>
-        <p class="text-dim text-sm">
+        <p class="text-muted text-sm">No webhooks configured.</p>
+        <p class="text-dim text-xs" style="margin-top:0.375rem">
           Add a webhook to notify Grimoire or other tools when books are added, updated, or extracted.
         </p>
       </div>
@@ -164,7 +155,7 @@
             <div class="webhook-header">
               <div class="webhook-url">
                 <span class="badge {wh.active ? 'badge-success' : 'badge-muted'}">
-                  {wh.active ? 'Active' : 'Inactive'}
+                  {wh.active ? 'Active' : 'Paused'}
                 </span>
                 <code class="url-text">{wh.url}</code>
               </div>
@@ -180,7 +171,7 @@
               </div>
             </div>
             {#if wh.description}
-              <p class="text-muted text-sm">{wh.description}</p>
+              <p class="text-muted text-sm" style="margin-top:0.25rem">{wh.description}</p>
             {/if}
             <div class="webhook-events">
               {#each wh.events as event}
@@ -192,10 +183,9 @@
       </div>
     {/if}
 
-    <!-- New webhook form -->
     {#if showWebhookForm}
       <div class="webhook-form card">
-        <h3>New Webhook</h3>
+        <h3 style="margin-bottom:1.125rem">New Webhook</h3>
 
         {#if webhookFormError}
           <div class="alert alert-error">{webhookFormError}</div>
@@ -209,20 +199,17 @@
         </div>
 
         <div class="field">
-          <label class="label" for="wh-secret">
-            Signing Secret * (min 16 chars)
-          </label>
+          <label class="label" for="wh-secret">Signing Secret * (min 16 chars)</label>
           <div class="secret-row">
             <input id="wh-secret" class="input" type="text"
               placeholder="At least 16 characters"
               bind:value={webhookForm.secret} />
             <button type="button" class="btn btn-secondary" on:click={generateSecret}>
-              🎲 Generate
+              Generate
             </button>
           </div>
-          <p class="text-xs text-dim mt-4">
-            Used to sign payloads with HMAC-SHA256. Store this securely.
-            Verify the <code>X-Arkheion-Signature</code> header on your receiver.
+          <p class="text-xs text-dim" style="margin-top:0.375rem">
+            Signs payloads with HMAC-SHA256. Verify the <code>X-Arkheion-Signature</code> header on your receiver.
           </p>
         </div>
 
@@ -257,15 +244,13 @@
     {/if}
   </section>
 
-  <!-- =====================================================================
-       Export Section
-       ===================================================================== -->
+  <!-- Export -->
   <section class="section">
     <div class="section-header">
       <div>
         <h2>Bulk Text Export</h2>
         <p class="text-muted text-sm">
-          Export extracted book text as JSONL for LLM training (Golem, custom fine-tuning).
+          Export extracted book text as JSONL for LLM pipelines (Golem, fine-tuning).
           Only books with extracted text are included.
         </p>
       </div>
@@ -274,17 +259,17 @@
     <div class="export-card card">
       <div class="export-filters">
         <div class="field">
-          <label class="label" for="ex-tag">Filter by Tag (optional)</label>
+          <label class="label" for="ex-tag">Tag filter</label>
           <input id="ex-tag" class="input" type="text" placeholder="e.g. philosophy"
             bind:value={exportTag} />
         </div>
         <div class="field">
-          <label class="label" for="ex-cat">Filter by Category (optional)</label>
+          <label class="label" for="ex-cat">Category filter</label>
           <input id="ex-cat" class="input" type="text" placeholder="e.g. Science"
             bind:value={exportCategory} />
         </div>
         <div class="field">
-          <label class="label" for="ex-lang">Filter by Language (optional)</label>
+          <label class="label" for="ex-lang">Language filter</label>
           <input id="ex-lang" class="input" type="text" placeholder="e.g. en"
             bind:value={exportLanguage} />
         </div>
@@ -292,14 +277,14 @@
 
       <div class="export-actions">
         <button class="btn btn-primary" on:click={handleExport} disabled={exportLoading}>
-          {exportLoading ? 'Exporting…' : '⬇ Download JSONL'}
+          {exportLoading ? 'Exporting…' : 'Download JSONL'}
         </button>
       </div>
 
       <div class="export-info">
-        <h4 class="text-sm">JSONL format</h4>
+        <p class="info-label">JSONL format</p>
         <pre class="code-block">{"{"}"id":"uuid","title":"Book Title","authors":["Author Name"],"categories":["Science"],"language":"en","text":"Full extracted text..."{"}"}</pre>
-        <p class="text-xs text-dim mt-4">
+        <p class="text-xs text-dim" style="margin-top:0.5rem">
           Each line is a self-contained JSON object. Compatible with Hugging Face datasets,
           Golem training pipelines, and most LLM fine-tuning frameworks.
         </p>
@@ -307,25 +292,18 @@
     </div>
   </section>
 
-  <!-- =====================================================================
-       API Reference
-       ===================================================================== -->
+  <!-- API Reference -->
   <section class="section">
     <h2>API Reference</h2>
-    <p class="text-muted text-sm mb-4">
-      Arkheion exposes a full REST API for external integrations.
-      All requests require the <code>X-API-Key</code> header.
+    <p class="text-muted text-sm" style="margin-bottom:1rem">
+      Arkheion exposes a full REST API. All requests require the <code>X-API-Key</code> header.
     </p>
     <div class="api-links">
-      <a href="/api/v1/docs/openapi.yaml" target="_blank" class="btn btn-secondary">
-        📄 OpenAPI Spec (YAML)
-      </a>
-      <a href="/api/v1/health" target="_blank" class="btn btn-secondary">
-        💚 Health Check
-      </a>
+      <a href="/api/v1/docs/openapi.yaml" target="_blank" class="btn btn-secondary">OpenAPI Spec</a>
+      <a href="/api/v1/health" target="_blank" class="btn btn-secondary">Health Check</a>
     </div>
     <div class="api-example">
-      <h4 class="text-sm text-muted mb-2">Quick example</h4>
+      <p class="info-label" style="margin-bottom:0.5rem">Example</p>
       <pre class="code-block">curl "http://localhost:8080/api/v1/books" \
   -H "X-API-Key: your-api-key" | jq .</pre>
     </div>
@@ -333,129 +311,131 @@
 </div>
 
 <style>
-  .admin-page { max-width: 860px; }
-  h1 { margin-bottom: 2rem; }
+  .admin-page { max-width: 820px; }
+  h1 { margin-bottom: 1.75rem; }
 
-  .section { margin-bottom: 3rem; }
+  .section { margin-bottom: 2.75rem; }
 
   .section-header {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
     gap: 1rem;
-    margin-bottom: 1.25rem;
+    margin-bottom: 1rem;
   }
-  .section-header h2 { margin-bottom: 0.25rem; }
+  .section-header h2 { margin-bottom: 0.2rem; }
 
   .empty-card {
     background: var(--color-bg-card);
-    border: 1px dashed var(--color-border);
+    border: 1px dashed var(--color-border-strong);
     border-radius: var(--radius-lg);
-    padding: 2rem;
+    padding: 1.75rem;
     text-align: center;
   }
-  .empty-card p { margin-bottom: 0.5rem; }
 
-  .webhooks-list { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1rem; }
+  .webhooks-list { display: flex; flex-direction: column; gap: 0.625rem; margin-bottom: 0.875rem; }
 
-  .webhook-item.card { padding: 1rem 1.25rem; }
+  .webhook-item.card { padding: 0.875rem 1rem; }
   .webhook-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 1rem;
-    margin-bottom: 0.5rem;
+    gap: 0.875rem;
+    margin-bottom: 0.375rem;
     flex-wrap: wrap;
   }
-  .webhook-url { display: flex; align-items: center; gap: 0.75rem; min-width: 0; flex: 1; }
+  .webhook-url { display: flex; align-items: center; gap: 0.625rem; min-width: 0; flex: 1; }
   .url-text {
     font-family: var(--font-mono);
-    font-size: 0.8rem;
+    font-size: 0.775rem;
     color: var(--color-text-muted);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .webhook-actions { display: flex; gap: 0.5rem; flex-shrink: 0; }
-  .webhook-events {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.375rem;
-    margin-top: 0.5rem;
-  }
+  .webhook-actions { display: flex; gap: 0.375rem; flex-shrink: 0; }
+  .webhook-events { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.4rem; }
   .event-badge {
     font-family: var(--font-mono);
-    font-size: 0.7rem;
-    padding: 0.1rem 0.4rem;
-    background: rgba(124, 106, 247, 0.1);
-    border: 1px solid rgba(124, 106, 247, 0.3);
-    border-radius: 4px;
-    color: var(--color-primary);
+    font-size: 0.675rem;
+    padding: 0.1rem 0.375rem;
+    background: rgba(192, 57, 43, 0.08);
+    border: 1px solid rgba(192, 57, 43, 0.2);
+    border-radius: 3px;
+    color: var(--color-accent);
   }
 
-  /* Webhook form */
-  .webhook-form.card { padding: 1.5rem; margin-top: 1rem; }
-  .webhook-form h3 { margin-bottom: 1.25rem; }
-  .secret-row { display: flex; gap: 0.75rem; }
-  .events-checkboxes {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
+  .webhook-form.card { padding: 1.375rem; margin-top: 0.875rem; }
+  .secret-row { display: flex; gap: 0.625rem; }
+  .events-checkboxes { display: flex; flex-direction: column; gap: 0.4rem; }
   .event-checkbox {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.45rem;
     cursor: pointer;
-    font-size: 0.875rem;
+    font-size: 0.825rem;
   }
-  .event-checkbox input { cursor: pointer; }
+  .event-checkbox input { cursor: pointer; accent-color: var(--color-primary); }
   .event-checkbox code {
     font-family: var(--font-mono);
-    font-size: 0.8rem;
-    color: var(--color-accent);
+    font-size: 0.775rem;
+    color: var(--color-text-muted);
   }
-  .form-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.75rem;
-    margin-top: 1.5rem;
-  }
+  .form-actions { display: flex; justify-content: flex-end; gap: 0.625rem; margin-top: 1.25rem; }
 
   /* Export */
-  .export-card.card { padding: 1.5rem; }
+  .export-card.card { padding: 1.375rem; }
   .export-filters {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 0 1rem;
-    margin-bottom: 1.25rem;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0 0.875rem;
+    margin-bottom: 1rem;
   }
-  .export-actions { margin-bottom: 1.5rem; }
-  .export-info { background: var(--color-bg-elevated); border-radius: var(--radius); padding: 1rem; }
-  .export-info h4 { margin-bottom: 0.5rem; }
+  .export-actions { margin-bottom: 1.25rem; }
+  .export-info {
+    background: var(--color-bg-elevated);
+    border-radius: var(--radius);
+    padding: 0.875rem;
+    border: 1px solid var(--color-border);
+  }
+  .info-label {
+    font-size: 0.675rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--color-text-dim);
+    margin-bottom: 0.4rem;
+  }
 
-  /* API section */
-  .api-links { display: flex; gap: 0.75rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
-  .api-example { background: var(--color-bg-card); border-radius: var(--radius); padding: 1rem; }
+  /* API */
+  .api-links { display: flex; gap: 0.625rem; margin-bottom: 1rem; flex-wrap: wrap; }
+  .api-example {
+    background: var(--color-bg-card);
+    border-radius: var(--radius);
+    padding: 0.875rem;
+    border: 1px solid var(--color-border);
+  }
 
   .code-block {
     background: var(--color-bg);
     border: 1px solid var(--color-border);
     border-radius: var(--radius);
-    padding: 0.75rem 1rem;
+    padding: 0.625rem 0.875rem;
     font-family: var(--font-mono);
-    font-size: 0.75rem;
+    font-size: 0.725rem;
     color: var(--color-text-muted);
     overflow-x: auto;
     white-space: pre;
+    line-height: 1.6;
   }
 
   code {
     font-family: var(--font-mono);
-    font-size: 0.8rem;
+    font-size: 0.775rem;
     background: var(--color-bg-elevated);
     padding: 0.1rem 0.3rem;
     border-radius: 3px;
-    color: var(--color-accent);
+    color: var(--color-text-muted);
+    border: 1px solid var(--color-border);
   }
 </style>
