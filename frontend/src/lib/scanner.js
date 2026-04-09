@@ -50,10 +50,24 @@ export class BarcodeScanner {
     await this.videoElement.play();
     this.scanning = true;
 
-    if (typeof BarcodeDetector !== 'undefined') {
+    // Check if native BarcodeDetector actually supports EAN-13
+    // On Linux Chrome/Brave, BarcodeDetector may exist but lack EAN support
+    const nativeOk = await this._nativeSupportsEAN();
+    if (nativeOk) {
       this._startNative();
     } else {
       await this._startZXing();
+    }
+  }
+
+  /** Returns true if BarcodeDetector is available and supports EAN-13 */
+  async _nativeSupportsEAN() {
+    if (typeof BarcodeDetector === 'undefined') return false;
+    try {
+      const supported = await BarcodeDetector.getSupportedFormats();
+      return supported.includes('ean_13') || supported.includes('ean_8');
+    } catch {
+      return false;
     }
   }
 
@@ -61,8 +75,9 @@ export class BarcodeScanner {
   _startNative() {
     let detector;
     try {
+      // 'isbn' is not a valid BarcodeDetector format — omit it
       detector = new BarcodeDetector({
-        formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code', 'isbn']
+        formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code']
       });
     } catch {
       // formats list not supported, try without
@@ -117,12 +132,14 @@ export class BarcodeScanner {
       BarcodeFormat.UPC_E
     ]);
     hints.set(DecodeHintType.TRY_HARDER, true);
+    hints.set(DecodeHintType.ALSO_INVERTED, true);
 
-    this._zxingReader = new BrowserMultiFormatReader(hints);
+    // Scan at 400ms intervals for more decode attempts per second
+    this._zxingReader = new BrowserMultiFormatReader(hints, { delayBetweenScanAttempts: 200 });
 
-    // Use decodeFromVideoDevice with null = default camera
-    // (we already set srcObject so just pass null for deviceId)
-    await this._zxingReader.decodeFromVideoDevice(null, this.videoElement, (result, error) => {
+    // Pass our existing stream directly so ZXing doesn't try to open the camera
+    // again (decodeFromVideoDevice(null) would conflict with our already-open stream).
+    await this._zxingReader.decodeFromStream(this._stream, this.videoElement, (result, error) => {
       if (result) {
         const now = Date.now();
         if (result.text !== this.lastResult || now - this.lastScanTime >= this.debounceMs) {
@@ -137,7 +154,9 @@ export class BarcodeScanner {
         const isNotFound =
           error.name === 'NotFoundException' ||
           msg.includes('No MultiFormat') ||
-          msg.includes('not found');
+          msg.includes('not found') ||
+          msg.includes('2D') ||
+          msg === '';
         if (!isNotFound && this.onError) {
           this.onError(error);
         }
