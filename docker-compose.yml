@@ -153,7 +153,7 @@ services:
   # Apache Tika 2.x — Document text extraction
   # ---------------------------------------------------------------------------
   tika:
-    image: apache/tika:2.9.2-full
+    image: apache/tika:latest
     container_name: arkheion-tika
     restart: unless-stopped
     networks:
