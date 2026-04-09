@@ -1,0 +1,214 @@
+version: "3.9"
+
+# =============================================================================
+# Arkheion — Production Docker Compose
+# =============================================================================
+# All services run on the arkheion network.
+# Persistent volumes are created automatically.
+#
+# Usage:
+#   cp .env.example .env && vim .env
+#   docker compose up -d
+#   ./scripts/migrate.sh
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Backend — Go + Fiber REST API
+  # ---------------------------------------------------------------------------
+  arkheion-backend:
+    image: ghcr.io/mathornton01/arkheion-backend:latest
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: arkheion-backend
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    environment:
+      BACKEND_PORT: "8080"
+      ARKHEION_API_KEYS: "${ARKHEION_API_KEYS}"
+      CORS_ALLOWED_ORIGINS: "${CORS_ALLOWED_ORIGINS:-http://localhost:3000}"
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
+      DATABASE_URL: "${DATABASE_URL}"
+      DB_MAX_OPEN_CONNS: "${DB_MAX_OPEN_CONNS:-25}"
+      DB_MAX_IDLE_CONNS: "${DB_MAX_IDLE_CONNS:-5}"
+      DB_CONN_MAX_LIFETIME_MINUTES: "${DB_CONN_MAX_LIFETIME_MINUTES:-30}"
+      MEILISEARCH_URL: "${MEILISEARCH_URL:-http://meilisearch:7700}"
+      MEILISEARCH_MASTER_KEY: "${MEILISEARCH_MASTER_KEY}"
+      MEILISEARCH_BOOKS_INDEX: "${MEILISEARCH_BOOKS_INDEX:-books}"
+      TIKA_URL: "${TIKA_URL:-http://tika:9998}"
+      TIKA_TIMEOUT_SECONDS: "${TIKA_TIMEOUT_SECONDS:-120}"
+      MINIO_ENDPOINT: "${MINIO_ENDPOINT:-minio:9000}"
+      MINIO_ACCESS_KEY: "${MINIO_ACCESS_KEY:-minioadmin}"
+      MINIO_SECRET_KEY: "${MINIO_SECRET_KEY}"
+      MINIO_BUCKET: "${MINIO_BUCKET:-arkheion}"
+      MINIO_USE_SSL: "${MINIO_USE_SSL:-false}"
+      MINIO_PUBLIC_URL: "${MINIO_PUBLIC_URL:-http://localhost:9000}"
+      WEBHOOK_DEFAULT_SECRET: "${WEBHOOK_DEFAULT_SECRET}"
+      WEBHOOK_MAX_RETRIES: "${WEBHOOK_MAX_RETRIES:-3}"
+      WEBHOOK_TIMEOUT_SECONDS: "${WEBHOOK_TIMEOUT_SECONDS:-10}"
+      GOOGLE_BOOKS_API_KEY: "${GOOGLE_BOOKS_API_KEY:-}"
+      OPENLIBRARY_BASE_URL: "${OPENLIBRARY_BASE_URL:-https://openlibrary.org}"
+      GOOGLE_BOOKS_BASE_URL: "${GOOGLE_BOOKS_BASE_URL:-https://www.googleapis.com/books/v1}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      meilisearch:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      tika:
+        condition: service_started
+    networks:
+      - arkheion
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ---------------------------------------------------------------------------
+  # Frontend — SvelteKit
+  # ---------------------------------------------------------------------------
+  arkheion-frontend:
+    image: ghcr.io/mathornton01/arkheion-frontend:latest
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: arkheion-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      PUBLIC_API_BASE_URL: "${PUBLIC_API_BASE_URL:-http://localhost:8080/api/v1}"
+      INTERNAL_API_BASE_URL: "http://arkheion-backend:8080/api/v1"
+      FRONTEND_API_KEY: "${FRONTEND_API_KEY}"
+    depends_on:
+      arkheion-backend:
+        condition: service_healthy
+    networks:
+      - arkheion
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 16
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: arkheion-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB:-arkheion}"
+      POSTGRES_USER: "${POSTGRES_USER:-arkheion}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - arkheion
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-arkheion} -d ${POSTGRES_DB:-arkheion}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    # Do not expose PostgreSQL port externally in production.
+    # Uncomment for local development access:
+    # ports:
+    #   - "5432:5432"
+
+  # ---------------------------------------------------------------------------
+  # Meilisearch 1.x
+  # ---------------------------------------------------------------------------
+  meilisearch:
+    image: getmeili/meilisearch:v1.8
+    container_name: arkheion-meilisearch
+    restart: unless-stopped
+    environment:
+      MEILI_MASTER_KEY: "${MEILISEARCH_MASTER_KEY}"
+      MEILI_ENV: "production"
+      MEILI_NO_ANALYTICS: "true"
+    volumes:
+      - meilisearch_data:/meili_data
+    networks:
+      - arkheion
+    # Uncomment to expose Meilisearch UI locally:
+    # ports:
+    #   - "7700:7700"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:7700/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ---------------------------------------------------------------------------
+  # Apache Tika 2.x — Document text extraction
+  # ---------------------------------------------------------------------------
+  tika:
+    image: apache/tika:2.9.2-full
+    container_name: arkheion-tika
+    restart: unless-stopped
+    networks:
+      - arkheion
+    # Tika is CPU-intensive during extraction. Limit resources:
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+    # Tika does not have a built-in healthcheck endpoint by default;
+    # the backend retries on failure.
+
+  # ---------------------------------------------------------------------------
+  # MinIO — S3-compatible object storage
+  # ---------------------------------------------------------------------------
+  minio:
+    image: minio/minio:RELEASE.2024-06-13T22-53-53Z
+    container_name: arkheion-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: "${MINIO_ACCESS_KEY:-minioadmin}"
+      MINIO_ROOT_PASSWORD: "${MINIO_SECRET_KEY}"
+    volumes:
+      - minio_data:/data
+    ports:
+      # MinIO Console — restrict to localhost in production
+      - "127.0.0.1:9001:9001"
+      # MinIO API — only expose internally; backend accesses via Docker network
+      # Uncomment if you need direct S3 API access from outside:
+      # - "9000:9000"
+    networks:
+      - arkheion
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      start_period: 30s
+
+# =============================================================================
+# Persistent Volumes
+# =============================================================================
+volumes:
+  postgres_data:
+    name: arkheion_postgres_data
+  meilisearch_data:
+    name: arkheion_meilisearch_data
+  minio_data:
+    name: arkheion_minio_data
+
+# =============================================================================
+# Network
+# =============================================================================
+networks:
+  arkheion:
+    name: arkheion
+    driver: bridge

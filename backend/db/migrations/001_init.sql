@@ -1,0 +1,14 @@
+-- Migration 001: Initialize schema infrastructure
+-- Creates the migrations tracking table and enables required extensions.
+
+-- Enable UUID generation
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- Track applied migrations
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    version     TEXT PRIMARY KEY,
+    applied_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO schema_migrations (version) VALUES ('001_init')
+    ON CONFLICT (version) DO NOTHING;

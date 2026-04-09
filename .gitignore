@@ -1,0 +1,44 @@
+# Environment files
+.env
+frontend/.env
+
+# Go
+backend/bin/
+backend/tmp/
+*.exe
+*.test
+*.out
+
+# Node / SvelteKit
+frontend/node_modules/
+frontend/.svelte-kit/
+frontend/build/
+frontend/.env.local
+
+# Docker volumes (if accidentally committed)
+postgres_data/
+minio_data/
+meilisearch_data/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Build artifacts
+dist/
+build/
+
+# Test coverage
+coverage/
+*.coverprofile
+
+# Backup files
+*.bak
+*.backup

@@ -1,0 +1,73 @@
+version: "3.9"
+
+# =============================================================================
+# Arkheion — Development Overrides
+# =============================================================================
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+# Or simply: make dev
+#
+# This file:
+# - Exposes all service ports for local debugging
+# - Mounts source directories for live reload (backend via air, frontend via Vite)
+# - Sets development-friendly defaults (verbose logging, Meilisearch UI)
+# =============================================================================
+
+services:
+
+  arkheion-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: development
+    image: arkheion-backend:dev
+    volumes:
+      - ./backend:/app
+      - go_cache:/root/go/pkg/mod
+    environment:
+      LOG_LEVEL: "debug"
+      CORS_ALLOWED_ORIGINS: "http://localhost:3000,http://localhost:5173"
+      GIN_MODE: "debug"
+    # Override command to use air for hot reload
+    command: ["air", "-c", ".air.toml"]
+
+  arkheion-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    image: arkheion-frontend:dev
+    volumes:
+      - ./frontend:/app
+      - node_modules:/app/node_modules
+    ports:
+      - "5173:5173"   # Vite dev server
+      - "3000:3000"   # SvelteKit SSR preview
+    environment:
+      PUBLIC_API_BASE_URL: "http://localhost:8080/api/v1"
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+
+  postgres:
+    ports:
+      - "5432:5432"   # Expose for local DB clients (DBeaver, psql, etc.)
+
+  meilisearch:
+    ports:
+      - "7700:7700"   # Expose Meilisearch web UI
+    environment:
+      MEILI_ENV: "development"
+      MEILI_NO_ANALYTICS: "true"
+
+  minio:
+    ports:
+      - "9000:9000"   # Expose MinIO S3 API
+      - "9001:9001"   # Expose MinIO Console
+
+  tika:
+    ports:
+      - "9998:9998"   # Expose Tika REST API for direct testing
+
+volumes:
+  go_cache:
+    name: arkheion_go_cache_dev
+  node_modules:
+    name: arkheion_node_modules_dev

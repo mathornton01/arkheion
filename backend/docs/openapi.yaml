@@ -1,0 +1,1057 @@
+openapi: "3.0.3"
+info:
+  title: Arkheion API
+  description: |
+    REST API for Arkheion — a self-hosted library management system.
+
+    ## Authentication
+
+    All endpoints (except `/api/v1/health`) require an API key passed in the
+    `X-API-Key` header. API keys are configured via the `ARKHEION_API_KEYS`
+    environment variable.
+
+    ```
+    X-API-Key: ark_live_abc123xyz
+    ```
+
+    ## Base URL
+
+    All endpoints are prefixed with `/api/v1`.
+
+    ## External Integrations
+
+    - **Grimoire**: Poll `GET /books` on a schedule or subscribe to webhooks
+    - **Golem / LLM training**: Use `GET /export?format=jsonl` for bulk text
+  version: "1.0.0"
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  contact:
+    name: Arkheion Project
+    url: https://github.com/mathornton01/arkheion
+
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Local development
+  - url: https://arkheion.example.com/api/v1
+    description: Production (replace with your domain)
+
+security:
+  - ApiKeyHeader: []
+
+components:
+  securitySchemes:
+    ApiKeyHeader:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  schemas:
+    Author:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        name:
+          type: string
+          example: "Carl Sagan"
+        created_at:
+          type: string
+          format: date-time
+
+    Tag:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: "science"
+        slug:
+          type: string
+          example: "science"
+        created_at:
+          type: string
+          format: date-time
+
+    Book:
+      type: object
+      required:
+        - id
+        - title
+        - text_extracted
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        isbn:
+          type: string
+          example: "9780345539434"
+          description: Normalized ISBN-10 or ISBN-13 (no dashes)
+        title:
+          type: string
+          example: "Cosmos"
+        subtitle:
+          type: string
+          example: "A Personal Voyage"
+        authors:
+          type: array
+          items:
+            $ref: "#/components/schemas/Author"
+        publisher:
+          type: string
+          example: "Random House"
+        published_date:
+          type: string
+          format: date
+          example: "1980-10-12"
+        description:
+          type: string
+          example: "Carl Sagan's beloved classic..."
+        page_count:
+          type: integer
+          example: 365
+        categories:
+          type: array
+          items:
+            type: string
+          example: ["Science", "Astronomy"]
+        language:
+          type: string
+          example: "en"
+          description: ISO 639-1 language code
+        cover_url:
+          type: string
+          format: uri
+          example: "https://covers.openlibrary.org/b/id/12345-L.jpg"
+        file_path:
+          type: string
+          example: "books/550e8400.../file.pdf"
+          description: Object key in MinIO (empty if no file uploaded)
+        file_type:
+          type: string
+          enum: [pdf, epub, txt, docx]
+          example: "pdf"
+        file_size_bytes:
+          type: integer
+          format: int64
+          example: 4567890
+        text_extracted:
+          type: boolean
+          example: false
+          description: True when Apache Tika has successfully extracted full text
+        tags:
+          type: array
+          items:
+            $ref: "#/components/schemas/Tag"
+        physical_location:
+          type: string
+          example: "Shelf A3, Box 2"
+        notes:
+          type: string
+          example: "Annotated copy — read in 2023"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateBookRequest:
+      type: object
+      required:
+        - title
+      properties:
+        isbn:
+          type: string
+          example: "9780345539434"
+        title:
+          type: string
+          example: "Cosmos"
+        subtitle:
+          type: string
+        authors:
+          type: array
+          items:
+            type: string
+          example: ["Carl Sagan"]
+        publisher:
+          type: string
+          example: "Random House"
+        published_date:
+          type: string
+          format: date
+          example: "1980-10-12"
+        description:
+          type: string
+        page_count:
+          type: integer
+        categories:
+          type: array
+          items:
+            type: string
+        language:
+          type: string
+          default: "en"
+        cover_url:
+          type: string
+          format: uri
+        tags:
+          type: array
+          items:
+            type: string
+          example: ["science", "classic"]
+        physical_location:
+          type: string
+        notes:
+          type: string
+
+    UpdateBookRequest:
+      type: object
+      description: All fields optional — only provided fields are updated.
+      properties:
+        isbn:
+          type: string
+        title:
+          type: string
+        subtitle:
+          type: string
+        authors:
+          type: array
+          items:
+            type: string
+        publisher:
+          type: string
+        published_date:
+          type: string
+          format: date
+        description:
+          type: string
+        page_count:
+          type: integer
+        categories:
+          type: array
+          items:
+            type: string
+        language:
+          type: string
+        cover_url:
+          type: string
+          format: uri
+        tags:
+          type: array
+          items:
+            type: string
+        physical_location:
+          type: string
+        notes:
+          type: string
+
+    BookListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Book"
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          example: 1
+        per_page:
+          type: integer
+          example: 20
+        total:
+          type: integer
+          example: 347
+        total_pages:
+          type: integer
+          example: 18
+
+    ISBNLookupResult:
+      type: object
+      description: Normalized book metadata from OpenLibrary or Google Books
+      properties:
+        isbn:
+          type: string
+        title:
+          type: string
+        subtitle:
+          type: string
+        authors:
+          type: array
+          items:
+            type: string
+        publisher:
+          type: string
+        published_date:
+          type: string
+          format: date
+        description:
+          type: string
+        page_count:
+          type: integer
+        categories:
+          type: array
+          items:
+            type: string
+        language:
+          type: string
+        cover_url:
+          type: string
+          format: uri
+        source:
+          type: string
+          enum: [openlibrary, google_books]
+          description: Which catalog provided the data
+
+    SearchResult:
+      type: object
+      properties:
+        query:
+          type: string
+        hits:
+          type: array
+          items:
+            type: object
+            description: Meilisearch hit — contains all indexed book fields
+        total_hits:
+          type: integer
+          format: int64
+        page:
+          type: integer
+        hits_per_page:
+          type: integer
+        total_pages:
+          type: integer
+          format: int64
+        estimated_total_hits:
+          type: integer
+          format: int64
+        processing_time_ms:
+          type: integer
+          format: int64
+
+    Webhook:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        url:
+          type: string
+          format: uri
+          example: "https://grimoire.example.com/webhooks/arkheion"
+        events:
+          type: array
+          items:
+            type: string
+            enum:
+              - book.created
+              - book.updated
+              - book.deleted
+              - book.text_extracted
+          example: ["book.created", "book.text_extracted"]
+        active:
+          type: boolean
+        description:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateWebhookRequest:
+      type: object
+      required:
+        - url
+        - secret
+        - events
+      properties:
+        url:
+          type: string
+          format: uri
+          example: "https://grimoire.example.com/webhooks/arkheion"
+        secret:
+          type: string
+          minLength: 16
+          description: Used to sign webhook payloads with HMAC-SHA256
+          example: "my-super-secret-webhook-key-123"
+        events:
+          type: array
+          items:
+            type: string
+            enum:
+              - book.created
+              - book.updated
+              - book.deleted
+              - book.text_extracted
+          minItems: 1
+        description:
+          type: string
+          example: "Grimoire knowledge graph sync"
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: "BOOK_NOT_FOUND"
+            message:
+              type: string
+              example: "No book found with id: 550e8400-..."
+            status:
+              type: integer
+              example: 404
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid API key
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    ValidationError:
+      description: Request validation failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+paths:
+
+  /health:
+    get:
+      tags: [System]
+      summary: Health check
+      description: Returns 200 if the backend is running. No authentication required.
+      security: []
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "ok"
+                  service:
+                    type: string
+                    example: "arkheion-backend"
+
+  /books:
+    get:
+      tags: [Books]
+      summary: List books
+      description: |
+        Returns a paginated list of books. Supports filtering by tag, category,
+        language, and text extraction status. For full-text search, use `/search`.
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: tag
+          in: query
+          description: Filter by tag slug
+          schema:
+            type: string
+          example: "science"
+        - name: category
+          in: query
+          description: Filter by category string (exact match)
+          schema:
+            type: string
+          example: "Science"
+        - name: language
+          in: query
+          description: Filter by ISO 639-1 language code
+          schema:
+            type: string
+          example: "en"
+        - name: text_extracted
+          in: query
+          description: Filter by whether text has been extracted
+          schema:
+            type: boolean
+        - name: q
+          in: query
+          description: Basic metadata search (title, subtitle, description). Use /search for full-text.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Paginated list of books
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+    post:
+      tags: [Books]
+      summary: Create a book
+      description: |
+        Creates a new book record. Does not upload the file — use
+        `POST /books/{id}/upload` to attach a PDF or EPUB.
+        Fires the `book.created` webhook event.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBookRequest"
+            example:
+              title: "Cosmos"
+              subtitle: "A Personal Voyage"
+              authors: ["Carl Sagan"]
+              isbn: "9780345539434"
+              publisher: "Random House"
+              published_date: "1980-10-12"
+              categories: ["Science", "Astronomy"]
+              language: "en"
+              tags: ["science", "classic"]
+      responses:
+        "201":
+          description: Book created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Book"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /books/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      tags: [Books]
+      summary: Get a book
+      description: Returns a single book with full metadata including authors and tags.
+      responses:
+        "200":
+          description: Book details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Book"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    put:
+      tags: [Books]
+      summary: Update a book
+      description: |
+        Updates book metadata. Only fields included in the request body are changed.
+        Fires the `book.updated` webhook event.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateBookRequest"
+      responses:
+        "200":
+          description: Updated book
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Book"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      tags: [Books]
+      summary: Delete a book
+      description: |
+        Deletes a book record and its associated file from MinIO.
+        Fires the `book.deleted` webhook event.
+      responses:
+        "204":
+          description: Book deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /books/{id}/upload:
+    post:
+      tags: [Books]
+      summary: Upload book file
+      description: |
+        Uploads a PDF, EPUB, DOCX, or TXT file for a book.
+        The file is stored in MinIO. Text extraction via Apache Tika is
+        triggered asynchronously. When extraction completes, the
+        `book.text_extracted` webhook event fires.
+
+        Maximum file size: 500 MB (configurable).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "200":
+          description: Upload accepted; extraction started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  file_path:
+                    type: string
+                  file_type:
+                    type: string
+                  file_size_bytes:
+                    type: integer
+                    format: int64
+        "400":
+          description: No file provided or unsupported file type
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /books/{id}/download:
+    get:
+      tags: [Books]
+      summary: Download book file
+      description: |
+        Downloads the book file proxied through the backend.
+        Files are never served directly from MinIO, ensuring API key auth is enforced.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: File download
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /catalog/isbn/{isbn}:
+    get:
+      tags: [Catalog]
+      summary: Look up ISBN
+      description: |
+        Queries OpenLibrary (primary) and Google Books (fallback) for book
+        metadata by ISBN. Returns normalized metadata ready to populate the
+        Add Book form.
+      parameters:
+        - name: isbn
+          in: path
+          required: true
+          description: ISBN-10 or ISBN-13 (dashes optional)
+          schema:
+            type: string
+          example: "9780345539434"
+      responses:
+        "200":
+          description: Book metadata found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ISBNLookupResult"
+        "400":
+          description: Invalid ISBN format
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: ISBN not found in any catalog
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "502":
+          description: Upstream catalog API unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /catalog/scan:
+    post:
+      tags: [Catalog]
+      summary: Scan barcode
+      description: |
+        Accepts a raw barcode string from ZXing-js, normalizes it to ISBN format,
+        and performs the same lookup as `/catalog/isbn/{isbn}`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - barcode
+              properties:
+                barcode:
+                  type: string
+                  description: Raw barcode string from ZXing scanner
+                  example: "9780345539434"
+      responses:
+        "200":
+          description: Book metadata found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ISBNLookupResult"
+        "400":
+          description: Missing barcode or invalid format
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /search:
+    get:
+      tags: [Search]
+      summary: Full-text search
+      description: |
+        Searches books using Meilisearch full-text search. Searches across title,
+        subtitle, authors, description, categories, tags, and extracted text content.
+
+        Use the `filter` parameter for faceted filtering (Meilisearch syntax):
+        - `filter=language="en"`
+        - `filter=categories="Science" AND text_extracted=true`
+        - `filter=tags="fiction" OR tags="classic"`
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Search query string
+          schema:
+            type: string
+          example: "black holes relativity"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: filter
+          in: query
+          description: Meilisearch filter expression
+          schema:
+            type: string
+          example: "language=\"en\" AND text_extracted=true"
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResult"
+        "400":
+          description: Missing query parameter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "502":
+          description: Meilisearch unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /export:
+    get:
+      tags: [Export]
+      summary: Bulk text export
+      description: |
+        Exports extracted book text as JSONL (newline-delimited JSON) for
+        LLM training pipelines (Golem, custom fine-tuning, etc.).
+
+        Only books with `text_extracted=true` are included.
+
+        Each line is a JSON object:
+        ```json
+        {"id":"uuid","title":"...","authors":["..."],"categories":["..."],"language":"en","text":"..."}
+        ```
+
+        This endpoint streams results — it does not buffer the full response in
+        memory, making it suitable for very large libraries.
+      parameters:
+        - name: format
+          in: query
+          description: Output format (only "jsonl" is currently supported)
+          schema:
+            type: string
+            enum: [jsonl]
+            default: jsonl
+        - name: tag
+          in: query
+          description: Filter by tag slug
+          schema:
+            type: string
+          example: "philosophy"
+        - name: category
+          in: query
+          description: Filter by category
+          schema:
+            type: string
+          example: "Science"
+        - name: language
+          in: query
+          description: Filter by language code
+          schema:
+            type: string
+          example: "en"
+      responses:
+        "200":
+          description: JSONL stream
+          content:
+            application/x-ndjson:
+              schema:
+                type: string
+                description: Newline-delimited JSON records
+        "400":
+          description: Unsupported format
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /webhooks:
+    get:
+      tags: [Webhooks]
+      summary: List webhooks
+      description: Returns all registered webhook endpoints. Secrets are not included.
+      responses:
+        "200":
+          description: List of webhooks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Webhook"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+    post:
+      tags: [Webhooks]
+      summary: Register a webhook
+      description: |
+        Registers a new webhook endpoint. The secret is used to sign payloads
+        with HMAC-SHA256. Verify signatures on your receiver using:
+        ```
+        X-Arkheion-Signature: sha256=<hex_digest>
+        ```
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWebhookRequest"
+      responses:
+        "201":
+          description: Webhook created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Webhook"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /webhooks/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      tags: [Webhooks]
+      summary: Get a webhook
+      responses:
+        "200":
+          description: Webhook details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Webhook"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      tags: [Webhooks]
+      summary: Delete a webhook
+      responses:
+        "204":
+          description: Webhook deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /webhooks/{id}/activate:
+    put:
+      tags: [Webhooks]
+      summary: Activate a webhook
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Webhook activated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Webhook"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /webhooks/{id}/deactivate:
+    put:
+      tags: [Webhooks]
+      summary: Deactivate a webhook
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Webhook deactivated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Webhook"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+tags:
+  - name: System
+    description: Health and system endpoints
+  - name: Books
+    description: Book catalog CRUD and file management
+  - name: Catalog
+    description: ISBN lookup and barcode scanning
+  - name: Search
+    description: Full-text search via Meilisearch
+  - name: Export
+    description: Bulk text export for LLM training
+  - name: Webhooks
+    description: Webhook registration and management
