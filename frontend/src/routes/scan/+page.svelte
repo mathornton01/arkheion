@@ -238,11 +238,11 @@
                 {lookupResult.source === 'openlibrary' ? 'OpenLibrary' : lookupResult.source === 'google_books' ? 'Google Books' : 'Manual entry'}
               </div>
 
-              {#if lookupResult.title}
-                <h2 class="result-title">{lookupResult.title}</h2>
-              {:else}
-                <p class="text-muted text-sm">No title found — edit after adding</p>
-              {/if}
+              <div class="field">
+                <label class="label" for="scan-title">Title</label>
+                <input id="scan-title" class="input" type="text" bind:value={lookupResult.title}
+                  placeholder="Book title (required)" required />
+              </div>
 
               {#if lookupResult.authors?.length > 0}
                 <p class="result-authors">{lookupResult.authors.join(', ')}</p>
@@ -272,7 +272,8 @@
           <div class="result-actions">
             <button class="btn btn-secondary" on:click={scanAnother}>Scan Another</button>
             <a href="/library" class="btn btn-secondary">Add Manually</a>
-            <button class="btn btn-primary" on:click={addBook} disabled={addingBook}>
+            <button class="btn btn-primary" on:click={addBook}
+              disabled={addingBook || !lookupResult?.title?.trim()}>
               {addingBook ? 'Adding…' : 'Add to Library'}
             </button>
           </div>

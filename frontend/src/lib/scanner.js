@@ -51,19 +51,18 @@ export class BarcodeScanner {
     this._stream = await navigator.mediaDevices.getUserMedia(constraints);
     this.scanning = true;
 
+    // Both paths: WE manage the video element (set srcObject and play).
+    // This must happen synchronously within user-gesture context to satisfy
+    // iOS Safari's autoplay policy. ZXing's decodeFromStream has an internal
+    // playVideoOnLoadAsync() that deadlocks, so we bypass it entirely.
+    this.videoElement.srcObject = this._stream;
+    this.videoElement.setAttribute('playsinline', '');
+    await this.videoElement.play();
+
     if (nativeOk) {
-      // Native path: we manage the video ourselves
-      this.videoElement.srcObject = this._stream;
-      this.videoElement.setAttribute('playsinline', '');
-      await this.videoElement.play();
       this._startNative();
     } else {
-      // ZXing path: let ZXing manage the video element (sets srcObject, plays, listens for events)
-      // Do NOT set srcObject or call play() — ZXing's decodeFromStream handles that.
-      // Remove autoplay to prevent race condition with ZXing's "playing" event listener.
-      this.videoElement.removeAttribute('autoplay');
-      this.videoElement.setAttribute('playsinline', '');
-      await this._startZXing(this._stream);
+      await this._startZXing();
     }
   }
 
@@ -119,39 +118,67 @@ export class BarcodeScanner {
 
   /**
    * ZXing BrowserMultiFormatReader — works on ALL browsers.
-   * Uses decodeFromStream which handles video setup and continuous scanning.
+   *
+   * IMPORTANT: We do NOT use decodeFromStream / decodeFromVideoDevice because
+   * ZXing's internal playVideoOnLoadAsync() deadlocks on iOS Safari — it waits
+   * for a 'canplay' event that may have already fired or never fires.
+   *
+   * Instead we:
+   *   1. Manage the video ourselves (srcObject + play) — done in start() before
+   *      this method is called, within user-gesture context.
+   *   2. Use a requestAnimationFrame loop to call reader.decode(videoElement)
+   *      which captures the current frame to canvas and decodes it.
    */
-  async _startZXing(stream) {
-    const { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat } = await import('@zxing/library');
+  async _startZXing() {
+    const zxing = await import('@zxing/library');
 
     const hints = new Map();
-    hints.set(DecodeHintType.POSSIBLE_FORMATS, [
-      BarcodeFormat.EAN_13,
-      BarcodeFormat.EAN_8,
-      BarcodeFormat.CODE_128,
-      BarcodeFormat.CODE_39,
-      BarcodeFormat.UPC_A,
-      BarcodeFormat.UPC_E
+    hints.set(zxing.DecodeHintType.POSSIBLE_FORMATS, [
+      zxing.BarcodeFormat.EAN_13,
+      zxing.BarcodeFormat.EAN_8,
+      zxing.BarcodeFormat.CODE_128,
+      zxing.BarcodeFormat.CODE_39,
+      zxing.BarcodeFormat.UPC_A,
+      zxing.BarcodeFormat.UPC_E
     ]);
-    hints.set(DecodeHintType.TRY_HARDER, true);
+    hints.set(zxing.DecodeHintType.TRY_HARDER, true);
 
-    const reader = new BrowserMultiFormatReader(hints, 250);
+    const reader = new zxing.BrowserMultiFormatReader(hints, 200);
     this._zxingReader = reader;
 
-    try {
-      await reader.decodeFromStream(stream, this.videoElement, (result, err) => {
-        if (!this.scanning) return;
+    // Frame-by-frame decode loop using requestAnimationFrame
+    let frameCount = 0;
+    const tick = () => {
+      if (!this.scanning) return;
 
-        if (result) {
-          this._emitResult(result.getText());
+      if (this.videoElement.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+        frameCount++;
+        // Decode every 3rd frame (~20fps on 60fps display) to save CPU
+        if (frameCount % 3 === 0) {
+          try {
+            // reader.decode() draws video frame to internal canvas, creates
+            // HTMLCanvasElementLuminanceSource, and runs the decode pipeline.
+            const result = reader.decode(this.videoElement);
+            if (result) {
+              this._emitResult(result.getText());
+            }
+          } catch (e) {
+            // NotFoundException is thrown every frame without a barcode — ignore
+            if (e.name !== 'NotFoundException' &&
+                e.constructor?.name !== 'NotFoundException' &&
+                !e.message?.includes('No MultiFormat')) {
+              console.warn('[Arkheion scanner] decode error:', e.message);
+            }
+          }
         }
-        // err is NotFoundException when no barcode visible — that's normal, ignore it
-      });
-    } catch (e) {
-      // Real errors (not NotFoundException) during setup
-      console.error('[Arkheion scanner] ZXing setup error:', e);
-      if (this.onError) this.onError(e);
-    }
+      }
+
+      if (this.scanning) {
+        this._animFrameId = requestAnimationFrame(tick);
+      }
+    };
+
+    this._animFrameId = requestAnimationFrame(tick);
   }
 
   _emitResult(text) {
