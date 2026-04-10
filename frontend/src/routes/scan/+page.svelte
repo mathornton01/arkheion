@@ -323,6 +323,8 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
+    border: 3px solid #2ecc71;
+    box-sizing: border-box;
   }
 
   .video-placeholder {
