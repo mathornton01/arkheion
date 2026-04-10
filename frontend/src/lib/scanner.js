@@ -1,8 +1,9 @@
 /**
  * Arkheion — Barcode Scanner wrapper
  *
- * Uses the native BarcodeDetector API (Chrome/Brave/Edge) as primary scanner,
- * falls back to @zxing/library for Firefox and other browsers.
+ * Strategy:
+ *   1. Native BarcodeDetector (Chrome/Edge on Android) — fast, hardware accelerated
+ *   2. ZXing BrowserMultiFormatReader.decodeFromStream() (all other browsers inc. iOS Safari)
  *
  * Usage (inside onMount or browser-only code):
  *   const { BarcodeScanner } = await import('$lib/scanner.js');
@@ -37,26 +38,32 @@ export class BarcodeScanner {
   async start(deviceId = null) {
     if (this.scanning) return;
 
-    // Acquire camera stream ourselves so we control it
+    // Check which strategy we'll use BEFORE touching the video element
+    const nativeOk = await this._nativeSupportsEAN();
+
     const constraints = {
       video: deviceId
         ? { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } }
         : { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
     };
 
+    // Get the camera stream
     this._stream = await navigator.mediaDevices.getUserMedia(constraints);
-    this.videoElement.srcObject = this._stream;
-    this.videoElement.setAttribute('playsinline', '');
-    await this.videoElement.play();
     this.scanning = true;
 
-    // Check if native BarcodeDetector actually supports EAN-13
-    // On Linux Chrome/Brave, BarcodeDetector may exist but lack EAN support
-    const nativeOk = await this._nativeSupportsEAN();
     if (nativeOk) {
+      // Native path: we manage the video ourselves
+      this.videoElement.srcObject = this._stream;
+      this.videoElement.setAttribute('playsinline', '');
+      await this.videoElement.play();
       this._startNative();
     } else {
-      await this._startZXing();
+      // ZXing path: let ZXing manage the video element (sets srcObject, plays, listens for events)
+      // Do NOT set srcObject or call play() — ZXing's decodeFromStream handles that.
+      // Remove autoplay to prevent race condition with ZXing's "playing" event listener.
+      this.videoElement.removeAttribute('autoplay');
+      this.videoElement.setAttribute('playsinline', '');
+      await this._startZXing(this._stream);
     }
   }
 
@@ -71,16 +78,14 @@ export class BarcodeScanner {
     }
   }
 
-  /** Native BarcodeDetector (Chrome/Brave/Edge) - fast, hardware accelerated */
+  /** Native BarcodeDetector (Chrome/Brave/Edge) — fast, hardware accelerated */
   _startNative() {
     let detector;
     try {
-      // 'isbn' is not a valid BarcodeDetector format — omit it
       detector = new BarcodeDetector({
         formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code']
       });
     } catch {
-      // formats list not supported, try without
       try {
         detector = new BarcodeDetector();
       } catch (e) {
@@ -97,15 +102,10 @@ export class BarcodeScanner {
           const codes = await detector.detect(this.videoElement);
           if (codes.length > 0) {
             const raw = codes[0].rawValue;
-            const now = Date.now();
-            if (raw !== this.lastResult || now - this.lastScanTime >= this.debounceMs) {
-              this.lastResult = raw;
-              this.lastScanTime = now;
-              if (this.onResult) this.onResult(raw);
-            }
+            this._emitResult(raw);
           }
         } catch {
-          // Detection errors on a single frame are normal — keep going
+          // Detection errors on a single frame are normal
         }
       }
 
@@ -117,10 +117,12 @@ export class BarcodeScanner {
     this._animFrameId = requestAnimationFrame(tick);
   }
 
-  /** ZXing fallback for Firefox etc. */
-  async _startZXing() {
-    const { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat } =
-      await import('@zxing/library');
+  /**
+   * ZXing BrowserMultiFormatReader — works on ALL browsers.
+   * Uses decodeFromStream which handles video setup and continuous scanning.
+   */
+  async _startZXing(stream) {
+    const { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat } = await import('@zxing/library');
 
     const hints = new Map();
     hints.set(DecodeHintType.POSSIBLE_FORMATS, [
@@ -132,36 +134,34 @@ export class BarcodeScanner {
       BarcodeFormat.UPC_E
     ]);
     hints.set(DecodeHintType.TRY_HARDER, true);
-    hints.set(DecodeHintType.ALSO_INVERTED, true);
 
-    // Scan at 400ms intervals for more decode attempts per second
-    this._zxingReader = new BrowserMultiFormatReader(hints, { delayBetweenScanAttempts: 200 });
+    const reader = new BrowserMultiFormatReader(hints, 250);
+    this._zxingReader = reader;
 
-    // Pass our existing stream directly so ZXing doesn't try to open the camera
-    // again (decodeFromVideoDevice(null) would conflict with our already-open stream).
-    await this._zxingReader.decodeFromStream(this._stream, this.videoElement, (result, error) => {
-      if (result) {
-        const now = Date.now();
-        if (result.text !== this.lastResult || now - this.lastScanTime >= this.debounceMs) {
-          this.lastResult = result.text;
-          this.lastScanTime = now;
-          if (this.onResult) this.onResult(result.text);
+    try {
+      await reader.decodeFromStream(stream, this.videoElement, (result, err) => {
+        if (!this.scanning) return;
+
+        if (result) {
+          this._emitResult(result.getText());
         }
-      }
-      if (error) {
-        // NotFoundException fires every frame when no barcode is visible — suppress it
-        const msg = error.message || '';
-        const isNotFound =
-          error.name === 'NotFoundException' ||
-          msg.includes('No MultiFormat') ||
-          msg.includes('not found') ||
-          msg.includes('2D') ||
-          msg === '';
-        if (!isNotFound && this.onError) {
-          this.onError(error);
-        }
-      }
-    });
+        // err is NotFoundException when no barcode visible — that's normal, ignore it
+      });
+    } catch (e) {
+      // Real errors (not NotFoundException) during setup
+      console.error('[Arkheion scanner] ZXing setup error:', e);
+      if (this.onError) this.onError(e);
+    }
+  }
+
+  _emitResult(text) {
+    if (!text) return;
+    const now = Date.now();
+    if (text !== this.lastResult || now - this.lastScanTime >= this.debounceMs) {
+      this.lastResult = text;
+      this.lastScanTime = now;
+      if (this.onResult) this.onResult(text);
+    }
   }
 
   /** Stop scanning and release camera. */
@@ -174,7 +174,10 @@ export class BarcodeScanner {
     }
 
     if (this._zxingReader) {
-      try { this._zxingReader.reset(); } catch { /* ignore */ }
+      try {
+        this._zxingReader.stopContinuousDecode();
+        this._zxingReader.reset();
+      } catch { /* ignore */ }
       this._zxingReader = null;
     }
 
@@ -192,8 +195,8 @@ export class BarcodeScanner {
 
   /** List available video input devices. */
   static async listCameras() {
-    const { BrowserMultiFormatReader } = await import('@zxing/library');
-    return BrowserMultiFormatReader.listVideoInputDevices();
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    return devices.filter(d => d.kind === 'videoinput');
   }
 }
 

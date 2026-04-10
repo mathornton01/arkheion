@@ -153,11 +153,12 @@
       <div class="scanner-section">
         <div class="video-container" class:active={scanning}>
           <!-- svelte-ignore a11y-media-has-caption -->
-          <video bind:this={videoEl} class="video-feed" playsinline autoplay muted></video>
+          <video bind:this={videoEl} class="video-feed" playsinline muted></video>
           {#if scanning}
             <div class="scan-overlay">
-              <div class="scan-frame"></div>
-              <div class="scan-line"></div>
+              <div class="scan-frame">
+                <div class="scan-line"></div>
+              </div>
             </div>
           {:else}
             <div class="video-placeholder">
@@ -366,7 +367,7 @@
 
   @keyframes scan {
     0%   { top: 0; opacity: 1; }
-    50%  { top: calc(100px - 2px); opacity: 1; }
+    50%  { top: calc(100% - 2px); opacity: 1; }
     100% { top: 0; opacity: 1; }
   }
 
